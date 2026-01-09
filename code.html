@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Billiards Game</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  canvas {
+    background: #1b5e20;
+    border: 15px solid #5d4037;
+  }
+</style>
+</head>
+<body>
+  <canvas id="table" width="900" height="450"></canvas>
+
+<script>
+  const canvas = document.getElementById("table")
+  const ctx = canvas.getContext("2d")
+  const FRICTION = 0.99
+  let balls = []
+  balls.push({
+    x:200,
+    y:225,
+    vx:0,
+    vy:0,
+    r:12,
+    m:1,
+    cue:true
+  })
+  for (let i = 0; i < 6; i++) {
+    balls.push({
+    x: 600 + (i % 3) * 26,
+    y: 200 + Math.floor(i / 3) * 26,
+    vx: 0,
+    vy: 0,
+    r: 12,
+    m: 1
+    })
+  }
+
+  const pockets = [
+  { x: 0, y: 0 },
+  { x: canvas.width / 2, y: 0 },
+  { x: canvas.width, y: 0 },
+
+  { x: 0, y: canvas.height },
+  { x: canvas.width / 2, y: canvas.height },
+  { x: canvas.width, y: canvas.height }
+]
+  function drawBall(b){
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI*2)
+    ctx.fillStyle = b.cue ? '#fff' : '#ff5252'
+    ctx.fill()
+  }
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height)
+    drawPockets()
+    balls.forEach(b => drawBall(b))
+  }
+  function drawPockets(){
+    ctx.fillStyle = '#000'
+    pockets.forEach(p =>{
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, 22, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
+  function update(){
+    balls.forEach((b)=>{
+      b.x += b.vx
+      b.y += b.vy
+      b.vx *= 0.99
+      b.vy *= 0.99
+      if (Math.abs(b.vx) < 0.01) b.vx = 0;
+      if (Math.abs(b.vy) < 0.01) b.vy = 0;
+      if (b.x-b.r <= 0 || b.x + b.r >= canvas.width ) {
+        b.vx *= -1
+      }
+      if (b.y-b.r <= 0 || b.y + b.r >= canvas.height ) {
+        b.vy *= -1
+      }
+  })
+      for (let i=0; i<balls.length; i++){
+        for (let j=i+1; j< balls.length; j++){
+          resolveCollision(balls[i], balls[j])
+        }
+      }
+      checkPockets()
+    }
+
+  function checkPockets(){
+    for (let i = balls.length - 1; i >= 0; i--) {
+    const b = balls[i]
+
+    for (const p of pockets) {
+      const dx = b.x - p.x
+      const dy = b.y - p.y
+      const dist = Math.hypot(dx, dy)
+
+      if (dist < 22) {
+        if (b.cue) {
+          b.x = 200
+          b.y = 225
+          b.vx = 0
+          b.vy = 0
+        } else {
+          balls.splice(i, 1)
+        }
+        break
+      }
+    }
+  }
+  }
+  function resolveCollision(b1, b2){
+    const dx = b2.x - b1.x
+    const dy = b2.y - b1.y
+    const dist = Math.hypot(dx, dy)
+    if (dist === 0 || dist > b1.r + b2.r) return
+  
+    const nx = dx / dist
+    const ny = dy / dist
+    const tx = -ny
+    const ty = nx
+  
+    const v1n = b1.vx * nx + b1.vy * ny
+    const v1t = b1.vx * tx + b1.vy * ty
+    const v2n = b2.vx * nx + b2.vy * ny
+    const v2t = b2.vx * tx + b2.vy * ty
+  
+    // 1D elastic collision (normal)
+    const v1nAfter = ((b1.m - b2.m) * v1n + 2 * b2.m * v2n) / (b1.m + b2.m)
+    const v2nAfter = ((b2.m - b1.m) * v2n + 2 * b1.m * v1n) / (b1.m + b2.m)
+  
+    b1.vx = v1nAfter * nx + v1t * tx
+    b1.vy = v1nAfter * ny + v1t * ty
+    b2.vx = v2nAfter * nx + v2t * tx
+    b2.vy = v2nAfter * ny + v2t * ty
+  
+    const overlap = b1.r + b2.r - dist
+    b1.x -= overlap * nx / 2
+    b1.y -= overlap * ny / 2
+    b2.x += overlap * nx / 2
+    b2.y += overlap * ny / 2
+  }
+  let aiming = false
+  let aimx, aimy
+  
+  document.addEventListener('mousedown',(e)=>{
+    const cue = balls[0]
+    const dx = e.offsetX - cue.x
+    const dy = e.offsetY - cue.y
+    if (Math.hypot(dx,dy) < cue.r + 5 && cue.vx === 0 && cue.vy ===0){
+      aiming = true
+    }
+  })
+  document.addEventListener('mousemove',(e)=>{
+    if (!aiming) return
+    aimx = e.offsetX
+    aimy = e.offsetY
+    
+  })
+  document.addEventListener('mouseup',(e)=>{
+    if (!aiming) return
+    const cue = balls[0]
+    balls[0].vx = (cue.x - aimx) * 0.1
+    balls[0].vy = (cue.y - aimy) * 0.1
+    aiming = false
+  })
+  function loop(){
+    update()
+    draw()
+    if (aiming){
+      const cue = balls[0]
+      ctx.beginPath()
+      ctx.moveTo(cue.x, cue.y)
+      ctx.lineTo(aimx, aimy)
+      ctx.strokeStyle = "#ffeb3b"
+      ctx.lineWidth = 4
+      ctx.stroke()
+    }
+    requestAnimationFrame(loop)
+  }
+
+
+  loop()
+  
+  
+
+</script>
+
+</body>
+</html>
